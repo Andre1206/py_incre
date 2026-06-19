@@ -7,69 +7,7 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <main class="game-shell">
-      <section class="ide-panel" aria-label="Python IDE">
-        <header class="panel-header">
-          <div>
-            <p class="eyebrow">Python IDE</p>
-            <h1>Incremental.py</h1>
-          </div>
-          <div class="runtime-status" aria-live="polite">
-            <span class="status-dot"></span>
-            每秒執行一行
-          </div>
-        </header>
-
-        <div class="stats" aria-label="玩家狀態">
-          <div class="stat">
-            <span class="stat-label">money</span>
-            <strong id="moneyValue">0</strong>
-          </div>
-          <div class="stat">
-            <span class="stat-label">x</span>
-            <strong id="xValue">1</strong>
-          </div>
-        </div>
-
-        <pre class="code-window" aria-label="正在執行的程式碼"><code id="codeLines"></code></pre>
-      </section>
-
-      <aside class="shop-panel" aria-label="升級商店">
-        <header class="panel-header">
-          <div>
-            <p class="eyebrow">Shop</p>
-            <h2>升級商店</h2>
-          </div>
-        </header>
-
-        <div class="upgrade-list">
-          <article class="upgrade">
-            <div class="upgrade-copy">
-              <h3>強化 x</h3>
-              <p>立即讓 <code>x</code> 增加 1。</p>
-              <span id="boostStatus" class="upgrade-meta">可重複購買</span>
-            </div>
-            <button id="buyBoost" type="button">
-              購買
-              <span id="boostCost">10</span>
-            </button>
-          </article>
-
-          <article class="upgrade">
-            <div class="upgrade-copy">
-              <h3>自我成長</h3>
-              <p>在 <code>money += x</code> 下方加入 <code>x += 0.01</code>。</p>
-              <span id="growthStatus" class="upgrade-meta">一次性升級</span>
-            </div>
-            <button id="buyGrowth" type="button">
-              購買
-              <span id="growthCost">50</span>
-            </button>
-          </article>
-        </div>
-      </aside>
-    </main>
-
+    <div id="app"></div>
     <script src="app.js"></script>
   </body>
 </html>
