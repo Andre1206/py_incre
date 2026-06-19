@@ -9,6 +9,8 @@
   --accent: #287c6f;
   --accent-strong: #1f655b;
   --accent-soft: #dff2ee;
+  --danger: #b95043;
+  --gold: #a06918;
   --code-bg: #101820;
   --code-line: #d7e3ee;
   --code-muted: #8290a0;
@@ -35,10 +37,245 @@ button {
   font: inherit;
 }
 
+code,
+.mono {
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.app-frame {
+  display: flex;
+  min-height: 100vh;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border-bottom: 1px solid var(--line);
+  padding: 18px 24px;
+  background: var(--panel-strong);
+}
+
+.brand h1 {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.1;
+}
+
+.eyebrow {
+  margin: 0 0 5px;
+  color: var(--accent);
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.top-actions,
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.resource-pill,
+.runtime-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--panel-strong);
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 800;
+}
+
+.status-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: #2fbf71;
+  box-shadow: 0 0 0 4px rgba(47, 191, 113, 0.16);
+}
+
+.screen {
+  width: min(1180px, 100%);
+  margin: 0 auto;
+  padding: 28px;
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.section-header h2,
+.panel-header h2,
+.panel-header h3 {
+  margin: 0;
+  font-size: clamp(1.35rem, 2.4vw, 2rem);
+  line-height: 1.1;
+}
+
+.section-header p,
+.empty-note {
+  max-width: 620px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 14px;
+}
+
+.level-card,
+.system-card,
+.upgrade,
+.achievement,
+.summary-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
+.level-card {
+  display: flex;
+  min-height: 220px;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+}
+
+.level-card.locked {
+  background: #f4f6f8;
+  color: var(--muted);
+}
+
+.level-card h3,
+.system-card h3,
+.upgrade h3,
+.achievement h3,
+.summary-card h3 {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+}
+
+.level-card p,
+.system-card p,
+.upgrade p,
+.achievement p,
+.summary-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 5px 9px;
+  background: #f8fafb;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.badge.complete {
+  border-color: #bfdfd6;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.badge.reward {
+  border-color: #e6cf9c;
+  background: #fff6df;
+  color: var(--gold);
+}
+
+.primary-button,
+.secondary-button,
+.danger-button,
+.upgrade button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  border-radius: 8px;
+  padding: 0 14px;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.primary-button,
+.upgrade button {
+  border: 0;
+  background: var(--accent);
+  color: #ffffff;
+}
+
+.primary-button:hover:not(:disabled),
+.upgrade button:hover:not(:disabled) {
+  background: var(--accent-strong);
+}
+
+.secondary-button {
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--text);
+}
+
+.danger-button {
+  border: 1px solid #e7b9b1;
+  background: #fff0ee;
+  color: var(--danger);
+}
+
+button:disabled,
+.upgrade button:disabled {
+  background: var(--disabled);
+  border-color: var(--disabled);
+  color: #ffffff;
+  cursor: not-allowed;
+}
+
 .game-shell {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
-  min-height: 100vh;
+  min-height: calc(100vh - 78px);
 }
 
 .ide-panel,
@@ -58,61 +295,9 @@ button {
   background: var(--panel);
 }
 
-.panel-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.eyebrow {
-  margin: 0 0 5px;
-  color: var(--accent);
-  font-size: 0.76rem;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
-h1,
-h2,
-h3,
-p {
-  margin-top: 0;
-}
-
-h1,
-h2 {
-  margin-bottom: 0;
-  font-size: clamp(1.6rem, 2.8vw, 2.4rem);
-  line-height: 1.05;
-}
-
-.runtime-status {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 8px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 8px 10px;
-  background: var(--panel-strong);
-  color: var(--muted);
-  font-size: 0.9rem;
-  font-weight: 700;
-}
-
-.status-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 999px;
-  background: #2fbf71;
-  box-shadow: 0 0 0 4px rgba(47, 191, 113, 0.16);
-}
-
 .stats {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   gap: 12px;
 }
 
@@ -120,7 +305,7 @@ h2 {
   min-width: 0;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 16px;
+  padding: 14px;
   background: var(--panel-strong);
 }
 
@@ -129,14 +314,14 @@ h2 {
   margin-bottom: 8px;
   color: var(--muted);
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
-  font-size: 0.86rem;
+  font-size: 0.82rem;
 }
 
 .stat strong {
   display: block;
   overflow-wrap: anywhere;
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
-  font-size: 2rem;
+  font-size: 1.65rem;
   line-height: 1.05;
 }
 
@@ -152,7 +337,7 @@ h2 {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-#codeLines {
+.code-lines {
   display: block;
   padding: 14px 0;
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
@@ -162,7 +347,7 @@ h2 {
 
 .code-line {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
+  grid-template-columns: 34px minmax(0, 1fr);
   min-height: 32px;
   padding-right: 18px;
 }
@@ -178,11 +363,12 @@ h2 {
 }
 
 .line-source {
-  padding-left: 18px;
+  padding-left: 10px;
   white-space: pre;
 }
 
-.upgrade-list {
+.upgrade-list,
+.stack {
   display: grid;
   gap: 14px;
 }
@@ -192,21 +378,7 @@ h2 {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 18px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
   padding: 18px;
-  background: var(--panel-strong);
-}
-
-.upgrade h3 {
-  margin-bottom: 8px;
-  font-size: 1.05rem;
-}
-
-.upgrade p {
-  margin-bottom: 10px;
-  color: var(--muted);
-  line-height: 1.5;
 }
 
 .upgrade code {
@@ -218,43 +390,59 @@ h2 {
   font-size: 0.92em;
 }
 
-.upgrade-meta {
+.upgrade-meta,
+.small-meta {
   color: var(--accent-strong);
   font-size: 0.88rem;
   font-weight: 800;
 }
 
-.upgrade button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 118px;
-  min-height: 44px;
-  border: 0;
-  border-radius: 8px;
-  padding: 0 16px;
-  background: var(--accent);
-  color: #ffffff;
-  cursor: pointer;
-  font-weight: 800;
-}
-
-.upgrade button:hover:not(:disabled) {
-  background: var(--accent-strong);
-}
-
-.upgrade button:disabled {
-  background: var(--disabled);
-  cursor: not-allowed;
-}
-
-.upgrade.owned {
+.upgrade.owned,
+.achievement.unlocked {
   background: var(--accent-soft);
 }
 
-@media (max-width: 820px) {
-  .game-shell {
+.systems-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.78fr);
+  gap: 18px;
+}
+
+.system-card,
+.summary-card {
+  padding: 18px;
+}
+
+.main-number {
+  margin: 8px 0 18px;
+  font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
+  font-size: clamp(2rem, 5vw, 4rem);
+  font-weight: 900;
+  line-height: 1;
+}
+
+.achievement-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.achievement {
+  padding: 14px;
+}
+
+.completion-panel {
+  max-width: 620px;
+  margin: 36px auto;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
+@media (max-width: 900px) {
+  .game-shell,
+  .systems-layout {
     grid-template-columns: 1fr;
   }
 
@@ -263,35 +451,37 @@ h2 {
     border-bottom: 1px solid var(--line);
   }
 
-  .ide-panel,
-  .shop-panel {
-    padding: 22px;
-  }
-
+  .topbar,
+  .section-header,
   .panel-header {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .screen,
+  .ide-panel,
+  .shop-panel {
+    padding: 20px;
   }
 
   .upgrade {
     grid-template-columns: 1fr;
   }
 
-  .upgrade button {
+  .upgrade button,
+  .primary-button,
+  .secondary-button,
+  .danger-button {
     width: 100%;
-  }
-}
-
-@media (max-width: 520px) {
-  .stats {
-    grid-template-columns: 1fr;
   }
 
   .code-line {
-    grid-template-columns: 38px minmax(0, 1fr);
+    grid-template-columns: 30px minmax(0, 1fr);
   }
 
   .line-source {
-    padding-left: 12px;
+    padding-left: 8px;
   }
 }
