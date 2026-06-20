@@ -36,10 +36,14 @@ origins, so their saves are separate.
 - Keep level content data-driven in the level definitions in `app.js`.
 - App views are `level-select`, `level-playing`, `level-complete`, and
   `main-game`.
+- The active level runtime is independent from the visible view. Switching to
+  the main game keeps the level running; only the explicit exit-level action
+  discards its in-memory progress.
 - A level owns its initial variables, instruction lines, shop upgrades,
   completion behavior, and fragment reward.
-- The runner executes one visible instruction per second. An inserted `break`
-  instruction completes the current level when reached.
+- Level and main-game runners execute one visible instruction per second. The
+  main game produces fragments through its persistent Python-like program. An
+  inserted `break` instruction completes the current level when reached.
 - Unlock rules allow every completed level and the lowest-numbered incomplete
   level to be played.
 - Persistent progress is stored in `localStorage` under

@@ -3,7 +3,7 @@ const SAVE_KEY = "python-incremental-save-v2";
 const app = document.querySelector("#app");
 
 const defaultSave = {
-  version: 2,
+  version: 3,
   completedLevels: [],
   fragments: 0,
   metaUpgrades: {
@@ -13,10 +13,10 @@ const defaultSave = {
   },
   achievements: {},
   main: {
-    energy: 0,
-    totalEnergy: 0,
-    generators: 0,
+    generator: 1,
     generatorCost: 25,
+    currentLineIndex: 0,
+    totalFragmentsGenerated: 0,
   },
 };
 
@@ -45,9 +45,9 @@ const achievementDefinitions = [
   {
     id: "main-100",
     title: "主線啟動",
-    description: "主線累積 100 energy。",
+    description: "主線程式累積產生 100 fragments。",
     reward: 18,
-    isUnlocked: () => save.main.totalEnergy >= 100,
+    isUnlocked: () => save.main.totalFragmentsGenerated >= 100,
   },
   {
     id: "meta-first",
@@ -276,11 +276,21 @@ function loadSave() {
     }
 
     const parsed = JSON.parse(raw);
+    const migratedMain = { ...defaultSave.main, ...parsed.main };
+
+    if ((parsed.version || 0) < 3) {
+      migratedMain.generator = 1 + (parsed.main?.generators || 0);
+      migratedMain.totalFragmentsGenerated = 0;
+      migratedMain.currentLineIndex = 0;
+      parsed.fragments = (parsed.fragments || 0) + Math.floor((parsed.main?.energy || 0) / 100);
+    }
+
     return {
       ...structuredClone(defaultSave),
       ...parsed,
+      version: defaultSave.version,
       metaUpgrades: { ...defaultSave.metaUpgrades, ...parsed.metaUpgrades },
-      main: { ...defaultSave.main, ...parsed.main },
+      main: migratedMain,
       achievements: { ...defaultSave.achievements, ...parsed.achievements },
     };
   } catch {
@@ -487,8 +497,28 @@ function startLevel(levelId) {
   render();
 }
 
+function showLevelDestination() {
+  if (appState.runtime) {
+    appState.view = "level-playing";
+  } else if (appState.completion) {
+    appState.view = "level-complete";
+  } else {
+    appState.view = "level-select";
+  }
+
+  render();
+}
+
+function exitLevel() {
+  appState.view = "level-select";
+  appState.runtime = null;
+  appState.completion = null;
+  render();
+}
+
 function completeLevel(runtime) {
   const level = getLevel(runtime.levelId);
+  const wasViewingLevel = appState.view === "level-playing";
   const firstClear = !save.completedLevels.includes(level.id);
   const rewardMultiplier = 1 + save.metaUpgrades.rewardBoost * 0.25;
   const reward = Math.ceil(level.reward * rewardMultiplier);
@@ -499,7 +529,9 @@ function completeLevel(runtime) {
   }
 
   save.fragments += reward;
-  appState.view = "level-complete";
+  if (wasViewingLevel) {
+    appState.view = "level-complete";
+  }
   appState.completion = { level, reward, firstClear };
   appState.runtime = null;
   checkAchievements();
@@ -509,7 +541,7 @@ function completeLevel(runtime) {
 
 function advanceLine() {
   const runtime = appState.runtime;
-  if (appState.view !== "level-playing" || !runtime) {
+  if (!runtime) {
     return;
   }
 
@@ -530,7 +562,9 @@ function advanceLine() {
   }
 
   checkAchievements();
-  render();
+  if (appState.view === "level-playing") {
+    render();
+  }
 }
 
 function buyLevelUpgrade(upgradeId) {
@@ -567,36 +601,46 @@ function buyMetaUpgrade(upgradeId) {
   render();
 }
 
-function buyMainGenerator() {
-  if (save.main.energy < save.main.generatorCost) {
-    return;
-  }
+function getMainProgram() {
+  const program = [
+    {
+      id: "main-loop",
+      source: "while True:",
+      run: () => {},
+    },
+    {
+      id: "main-gain",
+      source: "    fragment += generator",
+      run: () => {
+        save.fragments += save.main.generator;
+        save.main.totalFragmentsGenerated += save.main.generator;
+      },
+    },
+  ];
 
-  save.main.energy -= save.main.generatorCost;
-  save.main.generators += 1;
-  save.main.generatorCost = Math.ceil(save.main.generatorCost * 1.6);
-  checkAchievements();
-  persist();
-  render();
+  return program;
 }
 
-function convertMainEnergy() {
-  const amount = Math.floor(save.main.energy / 100);
-  if (amount <= 0) {
+function buyMainGenerator() {
+  if (save.fragments < save.main.generatorCost) {
     return;
   }
 
-  save.main.energy -= amount * 100;
-  save.fragments += amount;
+  save.fragments -= save.main.generatorCost;
+  save.main.generator += 1;
+  save.main.generatorCost = Math.ceil(save.main.generatorCost * 1.6);
+  addMetric("upgradePurchases");
   checkAchievements();
   persist();
   render();
 }
 
 function tickMainGame() {
-  const gain = 1 + save.main.generators * (1 + save.metaUpgrades.rewardBoost * 0.1);
-  save.main.energy += gain;
-  save.main.totalEnergy += gain;
+  const program = getMainProgram();
+  const index = Math.min(save.main.currentLineIndex, program.length - 1);
+  program[index].run();
+  save.main.currentLineIndex = index < program.length - 1 ? index + 1 : 0;
+
   checkAchievements();
   persist();
 
@@ -755,7 +799,7 @@ function renderLevelScreen() {
             <p class="eyebrow">Shop</p>
             <h3>升級商店</h3>
           </div>
-          <button class="secondary-button" data-action="show-levels" type="button">離開關卡</button>
+          <button class="danger-button" data-action="exit-level" type="button">退出關卡</button>
         </header>
         <div class="upgrade-list">
           ${level.upgrades.map((upgrade) => renderLevelUpgrade(upgrade, runtime)).join("")}
@@ -811,7 +855,7 @@ function renderCompletionScreen() {
           <span class="badge reward">取得 ${formatNumber(completion.reward)} fragments</span>
         </div>
         <div class="button-row" style="margin-top: 20px;">
-          <button class="primary-button" data-action="show-levels" type="button">回到選關</button>
+          <button class="primary-button" data-action="exit-level" type="button">回到選關</button>
           <button class="secondary-button" data-action="show-main" type="button">前往主線</button>
         </div>
       </section>
@@ -820,41 +864,60 @@ function renderCompletionScreen() {
 }
 
 function renderMainScreen() {
+  const program = getMainProgram();
+
   return `
-    <main class="screen">
-      <section class="section-header">
-        <div>
-          <p class="eyebrow">Main Incremental</p>
-          <h2>主線</h2>
-          <p>主線會持續產生 energy。energy 可以買 generator，也可以每 100 energy 轉成 1 fragment。</p>
+    <main class="game-shell">
+      <section class="ide-panel" aria-label="主線 Python IDE">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Main Incremental</p>
+            <h2>主線程式</h2>
+          </div>
+          <div class="runtime-status" aria-live="polite">
+            <span class="status-dot"></span>
+            每秒執行一行
+          </div>
+        </header>
+        <div class="stats">
+          ${renderStat("fragment", save.fragments)}
+          ${renderStat("generator", save.main.generator)}
+          ${renderStat("total", save.main.totalFragmentsGenerated)}
         </div>
+        <pre class="code-window" aria-label="主線執行中的程式碼"><code class="code-lines">${program
+          .map((line, index) => renderCodeLine(line, index, save.main.currentLineIndex))
+          .join("")}</code></pre>
       </section>
-      <div class="systems-layout">
-        <section class="system-card">
-          <h3>energy</h3>
-          <div class="main-number">${formatNumber(save.main.energy)}</div>
-          <p>每秒獲得 ${formatNumber(1 + save.main.generators * (1 + save.metaUpgrades.rewardBoost * 0.1))} energy。</p>
-          <div class="button-row" style="margin-top: 18px;">
-            <button class="primary-button" data-action="buy-generator" type="button" ${save.main.energy < save.main.generatorCost ? "disabled" : ""}>
-              買 generator ${formatNumber(save.main.generatorCost)}
-            </button>
-            <button class="secondary-button" data-action="convert-energy" type="button" ${save.main.energy < 100 ? "disabled" : ""}>
-              轉換 fragments
-            </button>
+      <aside class="shop-panel" aria-label="主線升級商店">
+        <header class="panel-header">
+          <div>
+            <p class="eyebrow">Program Shop</p>
+            <h3>主線升級</h3>
           </div>
-          <div class="badge-row">
-            <span class="badge">generators ${formatNumber(save.main.generators)}</span>
-            <span class="badge">total ${formatNumber(save.main.totalEnergy)}</span>
-          </div>
-        </section>
-        <section class="stack">
-          <article class="summary-card">
-            <h3>局外成長</h3>
-            <p>花費 fragments，讓之後的關卡更容易破關。</p>
+          <button class="secondary-button" data-action="show-levels" type="button">回到選關</button>
+        </header>
+        <div class="upgrade-list">
+          <article class="upgrade">
+            <div>
+              <h3>提高 generator</h3>
+              <p>立即執行 <code>generator += 1</code>。</p>
+              <span class="upgrade-meta">目前 ${formatNumber(save.main.generator)}</span>
+            </div>
+            <button data-action="buy-generator" type="button" ${save.fragments < save.main.generatorCost ? "disabled" : ""}>
+              購買 ${formatNumber(save.main.generatorCost)}
+            </button>
           </article>
+        </div>
+        <header class="panel-header subsection-header">
+          <div>
+            <p class="eyebrow">Meta Progression</p>
+            <h3>局外成長</h3>
+          </div>
+        </header>
+        <div class="upgrade-list">
           ${metaUpgradeDefinitions.map(renderMetaUpgrade).join("")}
-        </section>
-      </div>
+        </div>
+      </aside>
     </main>
   `;
 }
@@ -900,15 +963,16 @@ app.addEventListener("click", (event) => {
   const action = button.dataset.action;
 
   if (action === "show-levels") {
-    appState.view = "level-select";
-    appState.runtime = null;
-    render();
+    showLevelDestination();
   }
 
   if (action === "show-main") {
     appState.view = "main-game";
-    appState.runtime = null;
     render();
+  }
+
+  if (action === "exit-level") {
+    exitLevel();
   }
 
   if (action === "start-level") {
@@ -927,16 +991,13 @@ app.addEventListener("click", (event) => {
     buyMainGenerator();
   }
 
-  if (action === "convert-energy") {
-    convertMainEnergy();
-  }
-
   if (action === "reset-save") {
     resetSave();
   }
 });
 
 checkAchievements();
+persist();
 render();
 setInterval(() => {
   advanceLine();
