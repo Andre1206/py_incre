@@ -49,7 +49,10 @@ origins, so their saves are separate.
 - Persistent progress is stored in `localStorage` under
   `python-incremental-save-v2`.
 - Save data includes a version, completed levels, fragments, meta upgrades,
-  achievements, and main-game progress.
+  achievements, main-game progress, and the last processed tick timestamp.
+- Browser timers are treated only as wake-up signals. Elapsed wall-clock time
+  determines how many one-second ticks run, with catch-up work processed in
+  batches and capped at 24 hours.
 
 ## Development Guidelines
 

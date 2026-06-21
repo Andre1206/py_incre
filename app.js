@@ -1,9 +1,13 @@
 const SAVE_KEY = "python-incremental-save-v2";
+const TICK_MS = 1000;
+const MAX_CATCH_UP_MS = 24 * 60 * 60 * 1000;
+const CATCH_UP_BATCH_SIZE = 2000;
 
 const app = document.querySelector("#app");
 
 const defaultSave = {
-  version: 3,
+  version: 4,
+  lastTickAt: Date.now(),
   completedLevels: [],
   fragments: 0,
   metaUpgrades: {
@@ -21,6 +25,8 @@ const defaultSave = {
 };
 
 let save = loadSave();
+let catchUpInProgress = false;
+let catchUpToken = 0;
 let appState = {
   view: "level-select",
   runtime: null,
@@ -189,11 +195,23 @@ const levelDefinitions = [
       insertLineUpgrade(
         "mult-growth",
         "倍率自增",
-        "加入 multiplier += 0.02。",
+        "加入 multiplier += y。",
         160,
         "money += x * multiplier",
-        growthLine("multiplier", 0.02),
+        addLine("multiplier", "y"),
+        {
+          variables: { y: 0.02 },
+          extraLines: [
+            { afterSource: "multiplier = 1", line: setLine("y", 0.02) },
+          ],
+        },
       ),
+      addVariableUpgrade("y-plus", "提高 y", "立即讓 y 增加 0.01。", 200, "y", 0.01, {
+        repeatable: true,
+        multiplier: 1.75,
+        requires: "mult-growth",
+        lockedText: "先購買倍率自增",
+      }),
       breakUpgrade(300),
     ],
   },
@@ -404,13 +422,15 @@ function addVariableUpgrade(id, title, description, baseCost, variable, amount, 
     repeatable: Boolean(options.repeatable),
     maxPurchases: options.maxPurchases || Infinity,
     multiplier: options.multiplier || 1,
+    requires: options.requires || null,
+    lockedText: options.lockedText || "尚未解鎖",
     apply: (runtime) => {
       runtime.variables[variable] += amount;
     },
   };
 }
 
-function insertLineUpgrade(id, title, description, baseCost, afterSource, line) {
+function insertLineUpgrade(id, title, description, baseCost, afterSource, line, options = {}) {
   return {
     id,
     title,
@@ -420,7 +440,9 @@ function insertLineUpgrade(id, title, description, baseCost, afterSource, line) 
     maxPurchases: 1,
     multiplier: 1,
     apply: (runtime) => {
+      Object.assign(runtime.variables, options.variables || {});
       runtime.insertedLines.push({ afterSource, line });
+      runtime.insertedLines.push(...(options.extraLines || []));
     },
   };
 }
@@ -478,7 +500,8 @@ function getUpgradeCost(upgrade, runtime) {
 
 function canBuyUpgrade(upgrade, runtime) {
   const purchases = runtime.purchases[upgrade.id] || 0;
-  return purchases < upgrade.maxPurchases && runtime.variables.money >= getUpgradeCost(upgrade, runtime);
+  const requirementMet = !upgrade.requires || (runtime.purchases[upgrade.requires] || 0) > 0;
+  return requirementMet && purchases < upgrade.maxPurchases && runtime.variables.money >= getUpgradeCost(upgrade, runtime);
 }
 
 function getUnlockedLevelIds() {
@@ -516,7 +539,7 @@ function exitLevel() {
   render();
 }
 
-function completeLevel(runtime) {
+function completeLevel(runtime, { deferEffects = false } = {}) {
   const level = getLevel(runtime.levelId);
   const wasViewingLevel = appState.view === "level-playing";
   const firstClear = !save.completedLevels.includes(level.id);
@@ -534,12 +557,14 @@ function completeLevel(runtime) {
   }
   appState.completion = { level, reward, firstClear };
   appState.runtime = null;
-  checkAchievements();
-  persist();
-  render();
+  checkAchievements({ persistAfter: !deferEffects });
+  if (!deferEffects) {
+    persist();
+    render();
+  }
 }
 
-function advanceLine() {
+function advanceLine({ deferEffects = false } = {}) {
   const runtime = appState.runtime;
   if (!runtime) {
     return;
@@ -550,7 +575,7 @@ function advanceLine() {
   instruction.run(runtime);
 
   if (runtime.completed) {
-    completeLevel(runtime);
+    completeLevel(runtime, { deferEffects });
     return;
   }
 
@@ -561,9 +586,11 @@ function advanceLine() {
     runtime.currentLineIndex = loopStartIndex;
   }
 
-  checkAchievements();
-  if (appState.view === "level-playing") {
-    render();
+  if (!deferEffects) {
+    checkAchievements();
+    if (appState.view === "level-playing") {
+      render();
+    }
   }
 }
 
@@ -635,21 +662,24 @@ function buyMainGenerator() {
   render();
 }
 
-function tickMainGame() {
+function tickMainGame({ deferEffects = false } = {}) {
   const program = getMainProgram();
   const index = Math.min(save.main.currentLineIndex, program.length - 1);
   program[index].run();
   save.main.currentLineIndex = index < program.length - 1 ? index + 1 : 0;
 
+  if (deferEffects) {
+    return;
+  }
+
   checkAchievements();
   persist();
-
   if (appState.view === "main-game") {
     render();
   }
 }
 
-function checkAchievements() {
+function checkAchievements({ persistAfter = true } = {}) {
   let changed = false;
   achievementDefinitions.forEach((achievement) => {
     if (!save.achievements[achievement.id] && achievement.isUnlocked()) {
@@ -659,9 +689,66 @@ function checkAchievements() {
     }
   });
 
-  if (changed) {
+  if (changed && persistAfter) {
     persist();
   }
+}
+
+function processElapsedTime() {
+  if (catchUpInProgress) {
+    return;
+  }
+
+  const now = Date.now();
+  let previousTickAt = Number(save.lastTickAt) || now;
+  const rawElapsed = now - previousTickAt;
+
+  if (rawElapsed < 0) {
+    save.lastTickAt = now;
+    persist();
+    return;
+  }
+
+  if (rawElapsed > MAX_CATCH_UP_MS) {
+    previousTickAt = now - MAX_CATCH_UP_MS;
+    save.lastTickAt = previousTickAt;
+  }
+
+  let remainingTicks = Math.floor((now - previousTickAt) / TICK_MS);
+  if (remainingTicks <= 0) {
+    return;
+  }
+
+  catchUpInProgress = true;
+  const token = ++catchUpToken;
+
+  function runBatch() {
+    if (token !== catchUpToken) {
+      return;
+    }
+
+    const batchSize = Math.min(remainingTicks, CATCH_UP_BATCH_SIZE);
+    for (let index = 0; index < batchSize; index += 1) {
+      advanceLine({ deferEffects: true });
+      tickMainGame({ deferEffects: true });
+    }
+
+    remainingTicks -= batchSize;
+    save.lastTickAt += batchSize * TICK_MS;
+    persist();
+
+    if (remainingTicks > 0) {
+      setTimeout(runBatch, 0);
+      return;
+    }
+
+    catchUpInProgress = false;
+    checkAchievements({ persistAfter: false });
+    persist();
+    render();
+  }
+
+  runBatch();
 }
 
 function resetSave() {
@@ -670,6 +757,9 @@ function resetSave() {
   }
 
   save = structuredClone(defaultSave);
+  save.lastTickAt = Date.now();
+  catchUpToken += 1;
+  catchUpInProgress = false;
   appState = { view: "level-select", runtime: null, completion: null };
   persist();
   render();
@@ -802,7 +892,10 @@ function renderLevelScreen() {
           <button class="danger-button" data-action="exit-level" type="button">退出關卡</button>
         </header>
         <div class="upgrade-list">
-          ${level.upgrades.map((upgrade) => renderLevelUpgrade(upgrade, runtime)).join("")}
+          ${level.upgrades
+            .filter((upgrade) => !upgrade.requires || (runtime.purchases[upgrade.requires] || 0) > 0)
+            .map((upgrade) => renderLevelUpgrade(upgrade, runtime))
+            .join("")}
         </div>
       </aside>
     </main>
@@ -826,18 +919,19 @@ function renderCodeLine(line, index, activeIndex) {
 function renderLevelUpgrade(upgrade, runtime) {
   const purchases = runtime.purchases[upgrade.id] || 0;
   const owned = purchases >= upgrade.maxPurchases;
+  const locked = upgrade.requires && !(runtime.purchases[upgrade.requires] || 0);
   const cost = getUpgradeCost(upgrade, runtime);
-  const disabled = owned || runtime.variables.money < cost;
+  const disabled = locked || owned || runtime.variables.money < cost;
 
   return `
     <article class="upgrade ${owned ? "owned" : ""}">
       <div>
         <h3>${upgrade.title}</h3>
         <p>${upgrade.description}</p>
-        <span class="upgrade-meta">${owned ? "已完成" : upgrade.repeatable ? `已購買 ${purchases} 次` : "一次性升級"}</span>
+        <span class="upgrade-meta">${locked ? upgrade.lockedText : owned ? "已完成" : upgrade.repeatable ? `已購買 ${purchases} 次` : "一次性升級"}</span>
       </div>
       <button data-action="buy-level-upgrade" data-upgrade-id="${upgrade.id}" type="button" ${disabled ? "disabled" : ""}>
-        ${owned ? "完成" : `購買 ${formatNumber(cost)}`}
+        ${locked ? "尚未解鎖" : owned ? "完成" : `購買 ${formatNumber(cost)}`}
       </button>
     </article>
   `;
@@ -999,7 +1093,13 @@ app.addEventListener("click", (event) => {
 checkAchievements();
 persist();
 render();
-setInterval(() => {
-  advanceLine();
-  tickMainGame();
-}, 1000);
+processElapsedTime();
+setInterval(processElapsedTime, 250);
+
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) {
+    processElapsedTime();
+  }
+});
+
+window.addEventListener("focus", processElapsedTime);
