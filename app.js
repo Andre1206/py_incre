@@ -70,6 +70,13 @@ const achievementDefinitions = [
     isUnlocked: () => save.completedLevels.length >= 3,
   },
   {
+    id: "self-entangled",
+    title: "作繭自縛",
+    description: "在商店購買升級結果還不如不買",
+    reward: 20,
+    isUnlocked: () => getMetric("negativeAxisUpgradePurchases") >= 1,
+  },
+  {
     id: "all-levels",
     title: "第一章完成",
     description: "完成目前所有關卡。",
@@ -284,6 +291,86 @@ const levelDefinitions = [
       breakUpgrade(900),
     ],
   },
+  {
+    id: "level-6",
+    order: 6,
+    title: "第六關：模數循環",
+    summary: "觀察 res 在模數 k 中形成循環，調整 k 與 multiplier 累積通關資金。",
+    reward: 110,
+    variables: { money: 0, res: 1, k: 3, multiplier: 1 },
+    lines: [
+      setLine("res", 1),
+      setLine("k", 3),
+      setLine("multiplier", 1),
+      whileLine(),
+      moduloAssignmentLine("res", 2, "k", "res = (res * 2) % k"),
+      formulaLine("money", "res", "multiplier", "money += res * multiplier"),
+    ],
+    upgrades: [
+      addVariableUpgrade("k-plus", "增加 k", "立即讓 k 增加 2。", 30, "k", 2, {
+        repeatable: true,
+        multiplier: 1.6,
+      }),
+      addVariableUpgrade(
+        "mod-multiplier-plus",
+        "提高 multiplier",
+        "立即讓 multiplier 增加 0.2。",
+        45,
+        "multiplier",
+        0.2,
+        {
+          repeatable: true,
+          multiplier: 1.65,
+        },
+      ),
+      breakUpgrade(350),
+    ],
+  },
+  {
+    id: "level-7",
+    order: 7,
+    title: "第七關：旋轉軌跡",
+    summary: "x 與 y 在平面上持續旋轉，掌握負值時機並提高 multiplier。",
+    reward: 140,
+    variables: { money: 0, x: 10, y: 0, multiplier: 1 },
+    lines: [
+      tupleSetLine({ x: 10, y: 0 }, "x, y = 10, 0"),
+      setLine("multiplier", 1),
+      whileLine(),
+      rotationLine("x, y = 0.8 * x - 0.6 * y, 0.6 * x + 0.8 * y"),
+      absoluteFormulaLine(
+        "money",
+        "x",
+        "multiplier",
+        "money += Math.abs(x) * multiplier",
+      ),
+    ],
+    upgrades: [
+      addVariableUpgrade("rotation-x-plus", "增加 x", "立即讓 x 增加 2。", 75, "x", 2, {
+        repeatable: true,
+        multiplier: 1.65,
+        beforeApply: recordNegativeAxisPurchase("x"),
+      }),
+      addVariableUpgrade("rotation-y-plus", "增加 y", "立即讓 y 增加 2。", 75, "y", 2, {
+        repeatable: true,
+        multiplier: 1.65,
+        beforeApply: recordNegativeAxisPurchase("y"),
+      }),
+      addVariableUpgrade(
+        "rotation-multiplier-plus",
+        "提高 multiplier",
+        "立即讓 multiplier 增加 0.2。",
+        120,
+        "multiplier",
+        0.2,
+        {
+          repeatable: true,
+          multiplier: 1.7,
+        },
+      ),
+      breakUpgrade(600),
+    ],
+  },
 ];
 
 function loadSave() {
@@ -403,6 +490,64 @@ function formulaLine(target, left, right, source) {
   };
 }
 
+function tupleSetLine(values, source) {
+  return {
+    id: source,
+    source,
+    run: (runtime) => {
+      Object.entries(values).forEach(([variable, value]) => {
+        runtime.variables[variable] = value;
+      });
+      if (Object.hasOwn(values, "x")) {
+        runtime.variables.x += save.metaUpgrades.starterX;
+      }
+    },
+  };
+}
+
+function moduloAssignmentLine(target, factor, moduloVariable, source) {
+  return {
+    id: source,
+    source: source.startsWith("    ") ? source : `    ${source}`,
+    run: (runtime) => {
+      runtime.variables[target] =
+        (runtime.variables[target] * factor) % runtime.variables[moduloVariable];
+    },
+  };
+}
+
+function rotationLine(source) {
+  return {
+    id: source,
+    source: source.startsWith("    ") ? source : `    ${source}`,
+    run: (runtime) => {
+      const previousX = runtime.variables.x;
+      const previousY = runtime.variables.y;
+      runtime.variables.x = 0.8 * previousX - 0.6 * previousY;
+      runtime.variables.y = 0.6 * previousX + 0.8 * previousY;
+    },
+  };
+}
+
+function absoluteFormulaLine(target, valueVariable, multiplierVariable, source) {
+  return {
+    id: source,
+    source: source.startsWith("    ") ? source : `    ${source}`,
+    run: (runtime) => {
+      runtime.variables[target] +=
+        Math.abs(runtime.variables[valueVariable]) * runtime.variables[multiplierVariable];
+    },
+  };
+}
+
+function recordNegativeAxisPurchase(variable) {
+  return (runtime) => {
+    if (runtime.variables[variable] < -1) {
+      addMetric("negativeAxisUpgradePurchases");
+    }
+  };
+}
+
 function breakLine() {
   return {
     id: "break",
@@ -424,6 +569,7 @@ function addVariableUpgrade(id, title, description, baseCost, variable, amount, 
     multiplier: options.multiplier || 1,
     requires: options.requires || null,
     lockedText: options.lockedText || "尚未解鎖",
+    beforeApply: options.beforeApply || null,
     apply: (runtime) => {
       runtime.variables[variable] += amount;
     },
@@ -606,6 +752,7 @@ function buyLevelUpgrade(upgradeId) {
   const cost = getUpgradeCost(upgrade, runtime);
   runtime.variables.money -= cost;
   runtime.purchases[upgrade.id] = (runtime.purchases[upgrade.id] || 0) + 1;
+  upgrade.beforeApply?.(runtime);
   upgrade.apply(runtime);
   addMetric("upgradePurchases");
   checkAchievements();
