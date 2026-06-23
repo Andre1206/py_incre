@@ -37,6 +37,11 @@ button {
   font: inherit;
 }
 
+select,
+input {
+  font: inherit;
+}
+
 code,
 .mono {
   font-family: "Cascadia Code", "SFMono-Regular", Consolas, monospace;
@@ -367,6 +372,102 @@ button:disabled,
   white-space: pre;
 }
 
+.main-code-window {
+  min-height: 220px;
+  max-height: 360px;
+  flex: 0 1 auto;
+}
+
+.program-editor {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  background: var(--panel-strong);
+}
+
+.program-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.program-editor-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.program-line-list {
+  display: grid;
+  gap: 8px;
+}
+
+.program-line-item {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
+  min-height: 48px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 8px 7px 12px;
+  background: #f8fafb;
+}
+
+.program-line-item.disabled {
+  background: #eef1f4;
+  color: var(--muted);
+}
+
+.program-line-item code {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.program-line-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 800;
+}
+
+.program-line-toggle input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.line-order-controls {
+  display: grid;
+  grid-template-columns: repeat(2, 34px);
+  gap: 5px;
+}
+
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0;
+  background: var(--panel-strong);
+  color: var(--text);
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.icon-button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+}
+
 .upgrade-list,
 .stack {
   display: grid;
@@ -406,6 +507,45 @@ button:disabled,
 .upgrade.owned,
 .achievement.unlocked {
   background: var(--accent-soft);
+}
+
+.code-shop-item {
+  align-items: stretch;
+}
+
+.code-shop-item > div:first-child {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.code-shop-item > div:first-child h3 {
+  margin-bottom: 0;
+}
+
+.code-purchase-controls {
+  display: grid;
+  min-width: 190px;
+  align-content: end;
+  gap: 10px;
+}
+
+.insert-position-control {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.insert-position-control select {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 9px;
+  background: var(--panel-strong);
+  color: var(--text);
 }
 
 .systems-layout {
@@ -474,6 +614,18 @@ button:disabled,
 
   .upgrade {
     grid-template-columns: 1fr;
+  }
+
+  .program-line-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .program-line-toggle {
+    grid-column: 1 / -1;
+  }
+
+  .code-purchase-controls {
+    min-width: 0;
   }
 
   .upgrade button,

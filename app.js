@@ -6,7 +6,7 @@ const CATCH_UP_BATCH_SIZE = 2000;
 const app = document.querySelector("#app");
 
 const defaultSave = {
-  version: 4,
+  version: 5,
   lastTickAt: Date.now(),
   completedLevels: [],
   fragments: 0,
@@ -21,6 +21,13 @@ const defaultSave = {
     generatorCost: 25,
     currentLineIndex: 0,
     totalFragmentsGenerated: 0,
+    programLines: [
+      {
+        instanceId: "base-income",
+        definitionId: "base-income",
+        enabled: true,
+      },
+    ],
   },
 };
 
@@ -106,6 +113,55 @@ const metaUpgradeDefinitions = [
     description: "關卡通關 fragments 獎勵增加 25%。",
     baseCost: 40,
     getCost: (level) => Math.ceil(40 * Math.pow(2.15, level)),
+  },
+];
+
+const mainCodeDefinitions = [
+  {
+    id: "base-income",
+    title: "基礎收益",
+    description: "依照 generator 取得 fragments。",
+    source: "    fragment += generator",
+    cost: 0,
+    purchasable: false,
+    run: () => {
+      addMainFragments(save.main.generator);
+    },
+  },
+  {
+    id: "generator-growth",
+    title: "Generator 自增",
+    description: "每次執行有 1% 機率讓 generator 增加 0.1。",
+    source: "    generator += 0.1 if random.random() < 0.01 else 0",
+    cost: 40,
+    purchasable: true,
+    run: () => {
+      if (Math.random() < 0.01) {
+        save.main.generator += 0.1;
+      }
+    },
+  },
+  {
+    id: "bonus-income",
+    title: "額外收益",
+    description: "再取得一次 generator 的部分收益。",
+    source: "    fragment += generator * 0.5",
+    cost: 120,
+    purchasable: true,
+    run: () => {
+      addMainFragments(save.main.generator * 0.5);
+    },
+  },
+  {
+    id: "compound-generator",
+    title: "遞減 Generator 成長",
+    description: "generator 越高，每次執行獲得的增加量越少。",
+    source: "    generator += 1 / (generator ** 2)",
+    cost: 300,
+    purchasable: true,
+    run: () => {
+      save.main.generator += 1 / Math.pow(save.main.generator, 2);
+    },
   },
 ];
 
@@ -388,6 +444,10 @@ function loadSave() {
       migratedMain.totalFragmentsGenerated = 0;
       migratedMain.currentLineIndex = 0;
       parsed.fragments = (parsed.fragments || 0) + Math.floor((parsed.main?.energy || 0) / 100);
+    }
+
+    if (!Array.isArray(migratedMain.programLines) || migratedMain.programLines.length === 0) {
+      migratedMain.programLines = structuredClone(defaultSave.main.programLines);
     }
 
     return {
@@ -776,23 +836,101 @@ function buyMetaUpgrade(upgradeId) {
 }
 
 function getMainProgram() {
-  const program = [
+  const loopLines = save.main.programLines
+    .filter((line) => line.enabled)
+    .map((line) => {
+      const definition = getMainCodeDefinition(line.definitionId);
+      return definition
+        ? {
+            id: line.instanceId,
+            source: definition.source,
+            run: definition.run,
+          }
+        : null;
+    })
+    .filter(Boolean);
+
+  return [
     {
       id: "main-loop",
       source: "while True:",
       run: () => {},
     },
-    {
-      id: "main-gain",
-      source: "    fragment += generator",
-      run: () => {
-        save.fragments += save.main.generator;
-        save.main.totalFragmentsGenerated += save.main.generator;
-      },
-    },
+    ...loopLines,
   ];
+}
 
-  return program;
+function getMainCodeDefinition(definitionId) {
+  return mainCodeDefinitions.find((definition) => definition.id === definitionId);
+}
+
+function addMainFragments(amount) {
+  save.fragments += amount;
+  save.main.totalFragmentsGenerated += amount;
+}
+
+function resetMainProgramPointer() {
+  save.main.currentLineIndex = 0;
+}
+
+function buyMainCode(definitionId, insertionIndex) {
+  const definition = getMainCodeDefinition(definitionId);
+  const alreadyOwned = save.main.programLines.some(
+    (line) => line.definitionId === definitionId,
+  );
+
+  if (!definition?.purchasable || alreadyOwned || save.fragments < definition.cost) {
+    return;
+  }
+
+  const index = Math.max(
+    0,
+    Math.min(Number(insertionIndex) || 0, save.main.programLines.length),
+  );
+  save.fragments -= definition.cost;
+  save.main.programLines.splice(index, 0, {
+    instanceId: definition.id,
+    definitionId: definition.id,
+    enabled: true,
+  });
+  resetMainProgramPointer();
+  addMetric("upgradePurchases");
+  checkAchievements();
+  persist();
+  render();
+}
+
+function toggleMainCodeLine(instanceId, enabled) {
+  const line = save.main.programLines.find((item) => item.instanceId === instanceId);
+  if (!line) {
+    return;
+  }
+
+  line.enabled = enabled;
+  resetMainProgramPointer();
+  persist();
+  render();
+}
+
+function moveMainCodeLine(instanceId, direction) {
+  const currentIndex = save.main.programLines.findIndex(
+    (line) => line.instanceId === instanceId,
+  );
+  const targetIndex = currentIndex + direction;
+
+  if (
+    currentIndex < 0 ||
+    targetIndex < 0 ||
+    targetIndex >= save.main.programLines.length
+  ) {
+    return;
+  }
+
+  const [line] = save.main.programLines.splice(currentIndex, 1);
+  save.main.programLines.splice(targetIndex, 0, line);
+  resetMainProgramPointer();
+  persist();
+  render();
 }
 
 function buyMainGenerator() {
@@ -892,7 +1030,11 @@ function processElapsedTime() {
     catchUpInProgress = false;
     checkAchievements({ persistAfter: false });
     persist();
-    render();
+    if (appState.view === "main-game") {
+      updateMainRuntimeView();
+    } else {
+      render();
+    }
   }
 
   runBatch();
@@ -929,7 +1071,7 @@ function renderTopbar() {
         <h1>程式碼驅動的放置遊戲</h1>
       </div>
       <div class="top-actions">
-        <span class="resource-pill">fragments <span class="mono">${formatNumber(save.fragments)}</span></span>
+        <span class="resource-pill">fragments <span class="mono" data-role="topbar-fragments">${formatNumber(save.fragments)}</span></span>
         <button class="secondary-button" data-action="show-levels" type="button">選關</button>
         <button class="secondary-button" data-action="show-main" type="button">主線</button>
         <button class="danger-button" data-action="reset-save" type="button">重置</button>
@@ -1053,7 +1195,7 @@ function renderStat(key, value) {
   return `
     <div class="stat">
       <span class="stat-label">${key}</span>
-      <strong>${formatNumber(value)}</strong>
+      <strong data-stat-key="${key}">${formatNumber(value)}</strong>
     </div>
   `;
 }
@@ -1125,24 +1267,48 @@ function renderMainScreen() {
           ${renderStat("generator", save.main.generator)}
           ${renderStat("total", save.main.totalFragmentsGenerated)}
         </div>
-        <pre class="code-window" aria-label="主線執行中的程式碼"><code class="code-lines">${program
+        <pre class="code-window main-code-window" aria-label="主線執行中的程式碼"><code class="code-lines">${program
           .map((line, index) => renderCodeLine(line, index, save.main.currentLineIndex))
           .join("")}</code></pre>
+        <section class="program-editor" aria-label="主線程式行管理">
+          <header class="program-editor-header">
+            <div>
+              <p class="eyebrow">Loop Editor</p>
+              <h3>迴圈程式行</h3>
+            </div>
+            <span class="small-meta">${save.main.programLines.length} 行</span>
+          </header>
+          <div class="program-line-list">
+            ${renderMainProgramEditor()}
+          </div>
+        </section>
       </section>
       <aside class="shop-panel" aria-label="主線升級商店">
         <header class="panel-header">
           <div>
             <p class="eyebrow">Program Shop</p>
-            <h3>主線升級</h3>
+            <h3>程式碼商店</h3>
           </div>
           <button class="secondary-button" data-action="show-levels" type="button">回到選關</button>
+        </header>
+        <div class="upgrade-list">
+          ${mainCodeDefinitions
+            .filter((definition) => definition.purchasable)
+            .map(renderMainCodeShopItem)
+            .join("")}
+        </div>
+        <header class="panel-header subsection-header">
+          <div>
+            <p class="eyebrow">Variable Upgrade</p>
+            <h3>變數升級</h3>
+          </div>
         </header>
         <div class="upgrade-list">
           <article class="upgrade">
             <div>
               <h3>提高 generator</h3>
               <p>立即執行 <code>generator += 1</code>。</p>
-              <span class="upgrade-meta">目前 ${formatNumber(save.main.generator)}</span>
+              <span class="upgrade-meta">目前 <span data-role="main-generator-current">${formatNumber(save.main.generator)}</span></span>
             </div>
             <button data-action="buy-generator" type="button" ${save.fragments < save.main.generatorCost ? "disabled" : ""}>
               購買 ${formatNumber(save.main.generatorCost)}
@@ -1161,6 +1327,174 @@ function renderMainScreen() {
       </aside>
     </main>
   `;
+}
+
+function renderMainProgramEditor() {
+  return save.main.programLines
+    .map((line, index) => {
+      const definition = getMainCodeDefinition(line.definitionId);
+      if (!definition) {
+        return "";
+      }
+
+      return `
+        <article class="program-line-item ${line.enabled ? "" : "disabled"}">
+          <label class="program-line-toggle">
+            <input
+              type="checkbox"
+              data-action="toggle-main-code"
+              data-instance-id="${line.instanceId}"
+              ${line.enabled ? "checked" : ""}
+            >
+            <span>啟用</span>
+          </label>
+          <code>${definition.source.trim()}</code>
+          <div class="line-order-controls">
+            <button
+              class="icon-button"
+              data-action="move-main-code"
+              data-instance-id="${line.instanceId}"
+              data-direction="-1"
+              type="button"
+              title="上移"
+              aria-label="上移 ${definition.title}"
+              ${index === 0 ? "disabled" : ""}
+            >↑</button>
+            <button
+              class="icon-button"
+              data-action="move-main-code"
+              data-instance-id="${line.instanceId}"
+              data-direction="1"
+              type="button"
+              title="下移"
+              aria-label="下移 ${definition.title}"
+              ${index === save.main.programLines.length - 1 ? "disabled" : ""}
+            >↓</button>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderMainCodeShopItem(definition) {
+  const owned = save.main.programLines.some(
+    (line) => line.definitionId === definition.id,
+  );
+
+  return `
+    <article class="upgrade code-shop-item ${owned ? "owned" : ""}" data-code-definition-id="${definition.id}">
+      <div>
+        <h3>${definition.title}</h3>
+        <p>${definition.description}</p>
+        <code>${definition.source.trim()}</code>
+      </div>
+      <div class="code-purchase-controls">
+        ${
+          owned
+            ? '<span class="upgrade-meta">已取得</span>'
+            : `
+              <label class="insert-position-control">
+                <span>插入位置</span>
+                <select data-role="main-code-position">
+                  ${renderMainInsertionOptions()}
+                </select>
+              </label>
+            `
+        }
+        <button data-action="buy-main-code" data-definition-id="${definition.id}" type="button" ${owned || save.fragments < definition.cost ? "disabled" : ""}>
+          ${owned ? "已購買" : `購買 ${formatNumber(definition.cost)}`}
+        </button>
+      </div>
+    </article>
+  `;
+}
+
+function renderMainInsertionOptions() {
+  const options = ['<option value="0">迴圈第一行</option>'];
+  save.main.programLines.forEach((line, index) => {
+    const definition = getMainCodeDefinition(line.definitionId);
+    if (definition) {
+      options.push(
+        `<option value="${index + 1}">在 ${definition.source.trim()} 之後</option>`,
+      );
+    }
+  });
+  return options.join("");
+}
+
+function updateMainRuntimeView() {
+  const mainScreen = app.querySelector(".game-shell");
+  if (!mainScreen) {
+    render();
+    return;
+  }
+
+  const topbarFragments = app.querySelector('[data-role="topbar-fragments"]');
+  if (topbarFragments) {
+    topbarFragments.textContent = formatNumber(save.fragments);
+  }
+
+  const statValues = {
+    fragment: save.fragments,
+    generator: save.main.generator,
+    total: save.main.totalFragmentsGenerated,
+  };
+  Object.entries(statValues).forEach(([key, value]) => {
+    const element = mainScreen.querySelector(`[data-stat-key="${key}"]`);
+    if (element) {
+      element.textContent = formatNumber(value);
+    }
+  });
+
+  const generatorCurrent = mainScreen.querySelector(
+    '[data-role="main-generator-current"]',
+  );
+  if (generatorCurrent) {
+    generatorCurrent.textContent = formatNumber(save.main.generator);
+  }
+
+  const program = getMainProgram();
+  const renderedLines = mainScreen.querySelectorAll(
+    ".main-code-window .code-line",
+  );
+  if (renderedLines.length !== program.length) {
+    render();
+    return;
+  }
+
+  renderedLines.forEach((line, index) => {
+    line.classList.toggle("active", index === save.main.currentLineIndex);
+  });
+
+  const generatorButton = mainScreen.querySelector(
+    'button[data-action="buy-generator"]',
+  );
+  if (generatorButton) {
+    generatorButton.disabled = save.fragments < save.main.generatorCost;
+  }
+
+  mainScreen
+    .querySelectorAll('button[data-action="buy-main-code"]')
+    .forEach((button) => {
+      const definition = getMainCodeDefinition(button.dataset.definitionId);
+      const owned = save.main.programLines.some(
+        (line) => line.definitionId === button.dataset.definitionId,
+      );
+      button.disabled = !definition || owned || save.fragments < definition.cost;
+    });
+
+  mainScreen
+    .querySelectorAll('button[data-action="buy-meta-upgrade"]')
+    .forEach((button) => {
+      const upgrade = metaUpgradeDefinitions.find(
+        (item) => item.id === button.dataset.upgradeId,
+      );
+      if (upgrade) {
+        const cost = upgrade.getCost(save.metaUpgrades[upgrade.id]);
+        button.disabled = save.fragments < cost;
+      }
+    });
 }
 
 function renderMetaUpgrade(upgrade) {
@@ -1232,9 +1566,28 @@ app.addEventListener("click", (event) => {
     buyMainGenerator();
   }
 
+  if (action === "buy-main-code") {
+    const shopItem = button.closest("[data-code-definition-id]");
+    const positionSelect = shopItem?.querySelector('[data-role="main-code-position"]');
+    buyMainCode(button.dataset.definitionId, Number(positionSelect?.value || 0));
+  }
+
+  if (action === "move-main-code") {
+    moveMainCodeLine(button.dataset.instanceId, Number(button.dataset.direction));
+  }
+
   if (action === "reset-save") {
     resetSave();
   }
+});
+
+app.addEventListener("change", (event) => {
+  const toggle = event.target.closest('input[data-action="toggle-main-code"]');
+  if (!toggle) {
+    return;
+  }
+
+  toggleMainCodeLine(toggle.dataset.instanceId, toggle.checked);
 });
 
 checkAchievements();

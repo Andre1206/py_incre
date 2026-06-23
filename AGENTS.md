@@ -44,6 +44,12 @@ origins, so their saves are separate.
 - Level and main-game runners execute one visible instruction per second. The
   main game produces fragments through its persistent Python-like program. An
   inserted `break` instruction completes the current level when reached.
+- Main-game code definitions contain executable behavior, while the save only
+  stores owned line IDs, enabled states, and loop order. Program structure
+  changes reset the main instruction pointer to `while True:`.
+- Main-game ticks use targeted DOM updates so focused form controls are not
+  destroyed. Reserve full `render()` calls for navigation or structural UI
+  changes such as buying, toggling, or moving program lines.
 - Unlock rules allow every completed level and the lowest-numbered incomplete
   level to be played.
 - Persistent progress is stored in `localStorage` under
